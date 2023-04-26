@@ -1,0 +1,268 @@
+---
+title: "Diabetes Data"
+author: "JMC"
+date: "2023-04-20"
+output: html_document
+---
+
+```{r import set up, echo=FALSE, include=FALSE}
+library(readr)
+library(dplyr)
+dia <- read_csv("U:/Research_Projects/Diabetes Intervention Update Paper/5Yr_cohort_data.csv")
+ls(dia)
+diacollapse <- dia %>%
+  arrange(newid) %>%
+  group_by(newid, race2, firstdiabetica1c, minyear, totalyearelapsed, firstevera1c, lastevera1c) %>%
+  summarise(
+    sumofficevisits=sum(totalofficevisits),
+    sumnurseonly=sum(totalnurseonly),
+    sumdiabetesedu=sum(totaldiabetesedu),
+    sumdiabetescare=sum(totaldiabetescare)
+  ) %>%
+  mutate(a1cdelta=firstdiabetica1c-lastevera1c,
+          diabetesengaged=ifelse(sumdiabetesedu>5, 1, 0),
+         diabetescareengaged=ifelse(sumdiabetescare>5, 1, 0),
+         officevisitengaged=ifelse(sumofficevisits>165.7, 1, 0))
+    #totalyearelapsed + firstevera1c + lastevera1c + totalofficevisits + totalnurseonly + totaldiabetesedu + totaldiabetescare
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library(ggplot2)
+
+ci <- function(y, upper_limit = max(dia$hba) * 1.15) {
+  return(
+    data.frame(
+      y = 0.95 * upper_limit, 
+      label = paste('count =', length(y), '\n',
+                    'mean =', round(mean(y), 1), '\n')
+    )
+  )
+  }
+
+ggplot(dia, aes(x=newid, y=hba, group=newid)) + 
+  geom_boxplot(varwidth=TRUE, #notch=TRUE, 
+               outlier.shape=NA) +
+  geom_jitter(width=0.2, alpha=0.5) + 
+  theme_grey(base_size=12) + 
+  xlab("patient_id") + 
+  ylab("HBA1c") + 
+  labs(title="A1c by Patient ID") + theme(legend.position="none")
+```
+
+```{r graphs!, warning=FALSE, message=FALSE, echo=FALSE}
+library(ggplot2) 
+library(dplyr)
+library(tidyr)
+linedia <- dia %>%
+  subset(race2!="AAPI" & race2!="AIAN") %>%
+group_by(race2, year) %>%
+  mutate(meanhba=mean(hba), .groups="drop") 
+  ggplot(data=linedia, aes(year, meanhba, col=race2, shape=race2)) +
+  geom_point() + geom_line()
+  
+  linedia2 <- dia %>%
+  subset(race2!="AAPI" & race2!="AIAN") %>%
+group_by(race2, timesincecat) %>%
+  mutate(meanhba=mean(hba), .groups="drop") 
+  ggplot(data=linedia2, aes(timesincecat, meanhba, col=race2, shape=race2)) +
+  geom_point() + geom_line()
+  
+    linedia3 <- dia %>%
+  subset(race2!="AAPI" & race2!="AIAN" & timesincecat<=3000) %>%
+group_by(race2, timesincecat) %>%
+  mutate(meanhba=mean(hba), .groups="drop") 
+  ggplot(data=linedia3, aes(timesincecat, meanhba, col=race2, shape=race2)) +
+  geom_point() + geom_line()
+  
+ dia %>%
+group_by(newid) %>%
+  mutate(meanhba=mean(hba), .groups="drop") %>%
+  ggplot( aes(newid, meanhba, col=race2, shape=race2)) +
+  geom_point() +labs(title="Average A1c of All Individuals in Sample by Race") + ylab("Average A1c") + xlab("Patient")
+  
+  ggplot(data=linedia2, aes(timesincecat, hba, col=race2, shape=race2)) +
+  geom_point() + geom_line()
+  
+    ggplot(data=linedia2, aes(contact_date, hba, col=race2, shape=race2)) +
+  geom_point() + geom_line()
+  
+#change based on year started
+    diacollapse %>%
+      group_by(race2, minyear) %>%
+      mutate(meandelta=mean(a1cdelta), .group="drop") %>%
+    ggplot(aes(minyear, meandelta, col=race2, shape=race2)) +
+  geom_point() + geom_line() + xlab("Patient Year of Starting Care")
+    
+ diacollapse %>%
+ group_by(race2, minyear, diabetesengaged) %>%
+ mutate(meandelta=mean(a1cdelta), 
+               .group="drop") %>%
+    ggplot(aes(minyear, meandelta, col=race2, shape=race2)) +
+  geom_point() + geom_line() + facet_wrap(~diabetesengaged)+xlab("Patient Year of Starting Care")
+ 
+  diacollapse %>%
+ group_by(race2, minyear, diabetescareengaged) %>%
+ mutate(meandelta=mean(a1cdelta), 
+               .group="drop") %>%
+    ggplot(aes(minyear, meandelta, col=race2, shape=race2)) +
+  geom_point() + geom_line() + facet_wrap(~diabetescareengaged)+xlab("Patient Year of Starting Care")
+  
+   diacollapse %>%
+ group_by(race2, minyear, officevisitengaged) %>%
+ mutate(meandelta=mean(a1cdelta), 
+               .group="drop") %>%
+    ggplot(aes(minyear, meandelta, col=race2, shape=race2)) +
+  geom_point() + geom_line() + facet_wrap(~officevisitengaged)+xlab("Patient Year of Starting Care")
+    
+dia %>%
+  group_by(timesincecat, race2) %>%
+  summarise(unique=n_distinct(newid))
+
+dia %>%
+  group_by(newid) %>%
+  mutate(patdup=n())
+```
+```{r relevel, warning=FALSE, message=FALSE, echo=FALSE, results="hide"}
+relevel(factor(dia$race2), ref="White")
+```
+
+
+```{r table, warning=FALSE, message=FALSE, echo=FALSE}
+library(table1)
+library(dplyr)
+dia_n <- dia %>% 
+  group_by(patient_id) %>%
+  mutate(Npat=  n()) %>%
+  ungroup() %>%
+  distinct(patient_id, Npat)
+
+dia_n
+
+#use max number newid
+table1(~  hba + bmi +bp_diastolic + bp_systolic+  totalofficevisits + totalnurseonly + totaldiabetesedu + totaldiabetescare + time_dx_elapsed |race2, data=dia, overall="Total", caption="Characteristics of Diabetic Patients")
+
+dia %>%
+  group_by(newid, year) %>%
+  summarise(hba)
+  table1(~ patdup |race2, data=dia, overall="Total")
+```
+
+
+Calculate ICC
+```{r ICC calculation, warning=FALSE, message=FALSE, echo=FALSE}
+library(nlme)
+
+fit1 <- lme(hba ~ race2,
+            data=dia,
+            random= ~ 1 | patient_id)
+fit1
+
+ICClme <- function(out) {
+  varests <- as.numeric(VarCorr(out)[1:2])
+  varests[1] / sum(varests)
+}
+ICClme(fit1)
+
+```
+
+```{r ICC 2, warning=FALSE, message=FALSE}
+library(nlme)
+fit2 <- lme(hba ~ 1 ,
+            data=dia,
+            random= ~ 1 | patient_id)
+
+ICClme <- function(out) {
+  varests <- as.numeric(VarCorr(out)[1:2])
+  varests[1] / sum(varests)
+}
+ICClme(fit2)
+```
+
+
+```{r regression models, message=FALSE, warning=FALSE, echo=FALSE}
+library(modelsummary)
+library(gt)
+library(nlme)
+#dia <- within(dia, race2 <- relevel(race2, ref = "White"))
+#linear regression
+fitLR <- glm(hba ~ race2, data=dia)
+
+#marginal regression
+library(gee)
+fitMR <- gee(hba ~ race2, corstr="exchangeable", id=patient_id, data=dia)
+
+#fixed effects 
+fitFE <- lm(hba ~ race2 + patient_id, data=dia)
+
+#mixed effects
+fitME <- lme(hba ~ race2, data=dia, random=~1|patient_id)
+
+#mixed effects with race as additional predictor
+fitMER <- lme(hba ~ race2, data=dia, random = ~ race2|patient_id)
+
+table <- list(
+  "Linear Regression" =fitLR,
+  "marginal regression" = fitMR,
+  "fixed effect" = fitFE,
+  "mixed effect" = fitME,
+  "mixed effect with race" = fitMER
+)
+
+modelsummary(table, gof_omit=".*", statistic=c("conf.int", "s.e. = {std.error}", "p={p.value}"))
+
+```
+
+```{r regression model with intervention, message=FALSE, warning=FALSE, echo=FALSE}
+library(modelsummary)
+library(gt)
+library(nlme)
+#dia <- within(dia, race2 <- relevel(race2, ref = "White"))
+#linear regression
+fitLR_2 <- glm(hba ~ intervention , data=dia)
+
+#marginal regression
+library(gee)
+fitMR_2 <- gee(hba ~ intervention, corstr="exchangeable", id=patient_id, data=dia)
+
+#fixed effects 
+fitFE_2 <- lm(hba ~ intervention + newid, data=dia)
+
+#mixed effects
+fitME_2 <- lme(hba ~ intervention, data=dia, random=~1|newid)
+
+#mixed effects with race as additional predictor
+fitMER_white <- lme(hba ~ intervention, data=subset(dia, race2=="White"), random = ~1|newid)
+fitMER_Black <- lme(hba ~ intervention, data=subset(dia, race2=="Black"), random = ~1|newid)
+fitMER_Hispanic <- lme(hba ~ intervention, data=subset(dia, race2=="Hispanic"), random = ~1|newid)
+
+table2 <- list(
+  "Linear Regression" =fitLR_2,
+  "marginal regression" = fitMR_2,
+  "fixed effect" = fitFE_2,
+  "mixed effect" = fitME_2,
+  "mixed effect for White" = fitMER_white,
+  "mixed effect for Black" = fitMER_Black,
+  "mixed effect for Hispanic" = fitMER_Hispanic
+)
+
+modelsummary(table2, gof_omit=".*", statistic=c("conf.int", "s.e. = {std.error}", "p={p.value}"))
+
+```
+
+```{r reg with confounders :D, warning=FALSE, message=FALSE, echo=FALSE}
+library(nlme)
+#mixed effects
+fitME_adj <- lme(hba ~ intervention + firstevera1c  + medicaiduninsured + totaldiabetescare + totaldiabetesedu, data=dia, random=~1|newid)
+fitME_adj_White <- lme(hba ~ intervention + firstevera1c + medicaiduninsured + totaldiabetescare + totaldiabetesedu, data=subset(dia, race2=="White"), random = ~1|newid)
+fitME_adj_Black <- lme(hba ~ intervention + firstevera1c + medicaiduninsured + totaldiabetescare + totaldiabetesedu, data=subset(dia, race2=="Black"), random = ~1|newid)
+fitME_adj_Hispanic <- lme(hba ~ intervention + firstevera1c + medicaiduninsured + totaldiabetescare + totaldiabetesedu, data=subset(dia, race2=="Hispanic"), random = ~1|newid)
+
+table3 <- list(
+  "adjusted mixed effect for White" = fitME_adj_White,
+  "adjusted mixed effect for Black" = fitME_adj_Black,
+  "adjusted mixed effect for Hispanic" = fitME_adj_Hispanic
+)
+
+modelsummary(table3, gof_omit=".*", statistic=c("conf.int", "s.e. = {std.error}", "p={p.value}"))
+
+```
